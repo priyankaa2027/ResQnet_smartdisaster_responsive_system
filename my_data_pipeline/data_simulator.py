@@ -1,7 +1,8 @@
 import boto3
 import time
 import csv
-import random # Import random for unique sensor IDs if needed
+import random
+from decimal import Decimal # Import the Decimal type
 
 # Initialize the DynamoDB resource.
 # Ensure your AWS credentials are configured via AWS CLI (aws configure)
@@ -27,8 +28,6 @@ def simulate_event(filename, event_type, base_sensor_id):
         reader = csv.DictReader(csvfile)
         for i, row in enumerate(reader):
             # Generate a slightly unique sensorId for each data point within the simulation
-            # This helps in distinguishing individual entries if 'sensorId' is part of the key
-            # or if you want to track multiple "virtual" sensors of the same type.
             sensor_id = f"{base_sensor_id}-{random.randint(1000, 9999)}"
             
             data_point = {
@@ -37,20 +36,21 @@ def simulate_event(filename, event_type, base_sensor_id):
                 'eventType': event_type
             }
 
-            # Add specific metrics based on the event type
+            # Add specific metrics based on the event type and convert floats to Decimal
             if event_type == 'wildfire':
-                # Ensure data types match DynamoDB expectations (e.g., numbers are numbers)
                 data_point['temperature'] = int(row['temperature'])
                 data_point['humidity'] = int(row['humidity'])
                 data_point['wind_speed'] = int(row['wind_speed'])
             elif event_type == 'earthquake':
-                data_point['magnitude'] = float(row['magnitude'])
-                data_point['depth'] = float(row['depth'])
+                # Convert float values to Decimal
+                data_point['magnitude'] = Decimal(str(row['magnitude']))
+                data_point['depth'] = Decimal(str(row['depth']))
                 data_point['location'] = row['location'] # String type
             elif event_type == 'flood':
-                data_point['water_level'] = float(row['water_level'])
-                data_point['rainfall'] = float(row['rainfall'])
-                data_point['flow_rate'] = float(row['flow_rate'])
+                # Convert float values to Decimal
+                data_point['water_level'] = Decimal(str(row['water_level']))
+                data_point['rainfall'] = Decimal(str(row['rainfall']))
+                data_point['flow_rate'] = Decimal(str(row['flow_rate']))
             else:
                 print(f"Warning: Unknown event type '{event_type}'. Data might not be fully added.")
                 continue # Skip to the next row if event type is not recognized
