@@ -1,79 +1,38 @@
 import boto3
-import time
-import csv
-import random
-from decimal import Decimal # Import the Decimal type
+import json
+from boto3.dynamodb.conditions import Key
+from decimal import Decimal
 
-# Initialize the DynamoDB resource.
-# Ensure your AWS credentials are configured via AWS CLI (aws configure)
-# or environment variables. DO NOT hardcode them here for production.
-dynamodb = boto3.resource('dynamodb', region_name='ap-south-1') # Use your preferred AWS region
+def lambda_handler(event, context):
+    dynamodb = boto3.resource('dynamodb', region_name='ap-south-1')
+    table = dynamodb.Table('sensor_logs')
 
-# Get a reference to your DynamoDB table
-table = dynamodb.Table('sensor-logs')
+    # Get the latest record
+    response = table.scan()
+    items = sorted(response['Items'], key=lambda x: x['timestamp'], reverse=True)
 
-def simulate_event(filename, event_type, base_sensor_id):
-    """
-    Reads data from a CSV file and sends it to DynamoDB with a specified event type.
+    if not items:
+        return {
+            'statusCode': 404,
+            'body': json.dumps({'error': 'No data found'})
+        }
 
-    Args:
-        filename (str): The path to the CSV data file.
-        event_type (str): The type of event (e.g., 'wildfire', 'earthquake', 'flood').
-        base_sensor_id (str): A base ID for the sensor, to which a random number
-                              will be appended for uniqueness.
-    """
-    print(f"\n--- Simulating {event_type} event from {filename} ---")
-    
-    with open(filename, 'r') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for i, row in enumerate(reader):
-            # Generate a slightly unique sensorId for each data point within the simulation
-            sensor_id = f"{base_sensor_id}-{random.randint(1000, 9999)}"
-            
-            data_point = {
-                'sensorId': sensor_id,
-                'timestamp': int(time.time()), # Current Unix timestamp
-                'eventType': event_type
-            }
+    latest = items[0]
 
-            # Add specific metrics based on the event type and convert floats to Decimal
-            if event_type == 'wildfire':
-                data_point['temperature'] = int(row['temperature'])
-                data_point['humidity'] = int(row['humidity'])
-                data_point['wind_speed'] = int(row['wind_speed'])
-            elif event_type == 'earthquake':
-                # Convert float values to Decimal
-                data_point['magnitude'] = Decimal(str(row['magnitude']))
-                data_point['depth'] = Decimal(str(row['depth']))
-                data_point['location'] = row['location'] # String type
-            elif event_type == 'flood':
-                # Convert float values to Decimal
-                data_point['water_level'] = Decimal(str(row['water_level']))
-                data_point['rainfall'] = Decimal(str(row['rainfall']))
-                data_point['flow_rate'] = Decimal(str(row['flow_rate']))
-            else:
-                print(f"Warning: Unknown event type '{event_type}'. Data might not be fully added.")
-                continue # Skip to the next row if event type is not recognized
+    # Prediction logic (dummy)
+    prediction = "SEVERE" if 'temperature' in latest and latest['temperature'] > 40 else "NORMAL"
 
-            try:
-                # Put the item into the DynamoDB table
-                table.put_item(Item=data_point)
-                print(f"Sent: {data_point}")
-            except Exception as e:
-                print(f"Error sending data for {event_type} (Sensor ID: {sensor_id}): {e}")
-
-            time.sleep(2) # Wait 2 seconds before sending the next data point
-
-# --- Main simulation execution ---
-if __name__ == "__main__":
-    # Simulate wildfire events
-    simulate_event('wildfire_data.csv', 'wildfire', 'wildfire-sensor')
-    
-    # Simulate earthquake events
-    simulate_event('earthquake_data.csv', 'earthquake', 'earthquake-sensor')
-
-    # Simulate flood events
-    simulate_event('flood_data.csv', 'flood', 'flood-sensor')
-
-    print("\nAll simulations completed.")
-
+    return {
+        'statusCode': 200,
+        'headers': {
+            'Access-Control-Allow-Origin': '*'
+        },
+        'body': json.dumps({
+            'data': {
+                'temperature': int(latest.get('temperature', 0)),
+                'humidity': int(latest.get('humidity', 0)),
+                'windSpeed': int(latest.get('wind_speed', 0))
+            },
+            'prediction': prediction
+        })
+    }
